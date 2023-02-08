@@ -98,6 +98,18 @@ def cal_pnl(predictions: pd.DataFrame) -> pd.DataFrame:
     return df_pnl
 
 
+@st.cache(show_spinner=False)
+def read_s3(rpt, start_date, end_date, path):
+    df = read_parquet_tables(
+        rpt=rpt,
+        start_date=start_date,
+        end_date=end_date,
+        path=path,
+        bucket_name="scgc",
+    )
+    return df
+
+
 # %% Side Bar
 st.sidebar.header("User Settings")
 st.sidebar.markdown("""---""")
@@ -126,13 +138,7 @@ tab_market, tab_niv, tab_pnl = st.tabs(
 with tab_market:
     st.markdown("## UK Energy Generation by Type")
     # Load data
-    B1620 = read_parquet_tables(
-        rpt="B1620",
-        start_date=start_date,
-        end_date=end_date,
-        path="data/cleaned/elexon",
-        bucket_name="scgc",
-    )
+    B1620 = read_s3("B1620", start_date, end_date, "data/cleaned/elexon")
     # Line Chart
     st.line_chart(
         B1620,
@@ -157,12 +163,8 @@ with tab_market:
 with tab_niv:
     st.markdown("## NIV Predictions")
     # Load data
-    lgbm_regression = read_parquet_tables(
-        rpt="lgbm_regression",
-        start_date=start_date,
-        end_date=end_date,
-        path="data/predictions",
-        bucket_name="scgc",
+    lgbm_regression = read_s3(
+        "lgbm_regression", start_date, end_date, "data/predictions"
     )
     # Select prediction
     preds_to_plot = st.multiselect(
@@ -213,12 +215,8 @@ with tab_pnl:
 
     with col_pnl_chart:
         # Load Data
-        lgbm_regression = read_parquet_tables(
-            rpt="lgbm_regression",
-            start_date=start_date_pnl,
-            end_date=end_date_pnl,
-            path="data/predictions",
-            bucket_name="scgc",
+        lgbm_regression = read_s3(
+            "lgbm_regression", start_date_pnl, end_date_pnl, "data/predictions"
         )
         # Calculate and visualise the PnL
         df_pnl = cal_pnl(lgbm_regression)
@@ -237,7 +235,7 @@ with tab_pnl:
             df_pnl.set_index("local_datetime")[
                 start_date_pnl:end_date_pnl
             ].cumsum(),
-            y=["pnl_8sp", "pnl_morning", "pnl_afternoon"],
+            y=pnl_to_plot,
             height=600,
             use_container_width=True,
         )

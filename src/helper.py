@@ -2,14 +2,20 @@
 
 # %% Imports
 """Import Required Libraries"""
+import boto3
 import datetime as dt
+import io
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 import pyarrow
 from functools import reduce
+from decouple import config
 
 filesystem = None
+AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY")
+
 
 # %% Functions
 
@@ -89,6 +95,7 @@ def read_parquet_tables(
     start_date: str,
     end_date: str,
     path: str,
+    bucket_name="scgc",
     pq_filename: str = None,
 ) -> pd.DataFrame:
     """Read parquet file partitions
@@ -102,6 +109,12 @@ def read_parquet_tables(
     Returns:
         pd.DataFrame: Datframe from parquet file
     """
+    session = boto3.Session(
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+    s3 = session.resource("s3")
+
     if pq_filename == None:
         pq_filename = rpt
 
@@ -116,15 +129,27 @@ def read_parquet_tables(
         r_day = dt.datetime.strptime(read_date, "%Y-%m-%d").day
 
         try:
-            data = (
-                pq.ParquetDataset(
-                    path
-                    + f"/{rpt}/year={r_year}/month={r_month}/day={r_day}/{pq_filename}.parquet",
-                    filesystem=filesystem,
-                )
-                .read_pandas()
-                .to_pandas()
+            # new
+            s3_object = s3.Object(
+                bucket_name=bucket_name,
+                key=f"{path}/{rpt}/year={r_year}/month={r_month}/day={r_day}/{pq_filename}.parquet",
             )
+
+            buffer = io.BytesIO()
+            s3_object.download_fileobj(buffer)
+            data = pd.read_parquet(buffer)
+
+            # old
+            # data = (
+            #     pq.ParquetDataset(
+            #         path
+            #         + f"/{rpt}/year={r_year}/month={r_month}/day={r_day}/{pq_filename}.parquet",
+            #         filesystem=filesystem,
+            #     )
+            #     .read_pandas()
+            #     .to_pandas()
+            # )
+
             data["year"], data["month"], data["day"] = r_year, r_month, r_day
         except:
             continue
